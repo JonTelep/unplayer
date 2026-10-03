@@ -1,47 +1,104 @@
-#!/bin/bash
-# unplayer: pull the HLS stream out of a web video player and play it in mpv.
+#!/usr/bin/env bash
+# unplayer: pull the video stream out of a web player and play it in mpv.
 # No browser, so none of the page's ads, popups or popunders ever run.
-#
 # Falls back to mpv + yt-dlp (YouTube, Twitch, ...) when the page hides its stream.
-#
-# Usage: unplayer <page-or-player-url> [mirror#]
-#   mirror# = use the Nth stream found (default: first one that delivers video)
+# https://github.com/JonTelep/unplayer
 set -euo pipefail
-url="${1:?usage: unplayer <page-or-player-url> [mirror#]}"
-pick="${2:-}"
-here=$(dirname "$(readlink -f "$0")")
-MPV=(mpv --cache=yes --demuxer-readahead-secs=30 --input-conf="$here/input.conf")
+VERSION=0.1.0
+
+usage() {
+  cat <<EOF
+unplayer $VERSION: watch web video streams in mpv, with no ads, popups or browser.
+
+Usage: unplayer [options] <url> [N]
+
+  <url>             page you'd watch on, or the player/embed URL
+  N                 play the Nth stream found (default: first one that works)
+
+Options:
+  -f, --foreground  keep mpv attached to this terminal (shows its output)
+  -h, --help        show this help
+  -V, --version     show version
+EOF
+}
+
+fg=
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -V|--version) echo "unplayer $VERSION"; exit 0 ;;
+    -f|--foreground) fg=1; shift ;;
+    -*) echo "unplayer: unknown option $1" >&2; usage >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+[[ $# -ge 1 ]] || { usage >&2; exit 2; }
+url=$1 pick=${2:-}
+[[ -z "$pick" || "$pick" =~ ^[1-9][0-9]*$ ]] || { echo "unplayer: N must be a positive number" >&2; exit 2; }
+for dep in curl mpv; do
+  command -v "$dep" >/dev/null || { echo "unplayer: '$dep' is required but not installed" >&2; exit 1; }
+done
+
 UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36"
+# mpv binds 1-8 to contrast/brightness/gamma/saturation: a held "3" or a stray
+# Super+3 while the new window grabs focus turns the picture black. Wheel and
+# up/down control volume instead of seeking (seeking a live stream is useless).
+KEYS='1 ignore
+2 ignore
+3 ignore
+4 ignore
+5 ignore
+6 ignore
+7 ignore
+8 ignore
+WHEEL_UP add volume 5
+WHEEL_DOWN add volume -5
+UP add volume 5
+DOWN add volume -5'
+LOG="${XDG_STATE_HOME:-$HOME/.local/state}/unplayer.log"
+
+# Start mpv detached so the terminal comes straight back (or attached with -f).
+play() {
+  local mpv=(mpv --force-window=immediate --cache=yes --demuxer-readahead-secs=30 "--input-conf=memory://$KEYS" "$@")
+  [[ -n "$fg" ]] && exec "${mpv[@]}"
+  mkdir -p "$(dirname "$LOG")"
+  nohup "${mpv[@]}" >"$LOG" 2>&1 </dev/null &
+  echo "Opened in mpv. Close the window (or press q) to stop. Log: $LOG"
+  exit 0
+}
+# Sites whose player hides the stream (YouTube, Twitch, ~1800 more): mpv's yt-dlp
+# hook pulls the raw stream, so the site's player and its ads never load.
+ytdl() { echo "$1 Handing off to yt-dlp..."; play "$url"; }
 
 fetch() { curl -sL -m 15 -A "$UA" ${2:+-e "$2"} "$1" || true; }
 origin() { grep -oE '^https?://[^/]+' <<<"$1"; }
-# absolute URL of a playlist entry (entries may be relative to the playlist)
-# fallback for sites whose player hides the stream (YouTube, Twitch, ~1800 more):
-# mpv's yt-dlp hook pulls the raw stream, so the site's player and its ads never load
-ytdl() { echo "$1 Handing off to yt-dlp..."; exec "${MPV[@]}" --force-window=immediate "$url"; }
+# Absolute URL of a playlist entry (entries may be relative to the playlist).
 resolve() { case "$2" in http*) echo "$2" ;; /*) echo "$(origin "$1")$2" ;; ?*) echo "${1%/*}/$2" ;; esac; }
 
-# 1. Candidate player pages: the page itself, its iframes, and mirror-button
-#    mirror buttons (stream-btn-<id> -> <embed-host>/new-stream-embed/<id>).
+# 1. Candidate player pages: the page itself, its iframes, and mirror buttons
+#    (stream-btn-<id> -> <embed-host>/new-stream-embed/<id>).
 page=$(fetch "$url")
 players=("$url")
-mapfile -t -O 1 players < <(grep -oE '<iframe[^>]+src="https?://[^"]+"' <<<"$page" | grep -oE 'https?://[^"]+')
+for f in $(grep -oE '<iframe[^>]+src="https?://[^"]+"' <<<"$page" | grep -oE 'https?://[^"]+' || true); do players+=("$f"); done
 embed=$(grep -oE 'https?://[^"/]+/new-stream-embed/' <<<"$page" | head -1 || true)
 if [[ -n "$embed" ]]; then
-  for id in $(grep -oE 'stream-btn-[0-9]+' <<<"$page" | grep -oE '[0-9]+'); do players+=("$embed$id"); done
+  for id in $(grep -oE 'stream-btn-[0-9]+' <<<"$page" | grep -oE '[0-9]+' || true); do players+=("$embed$id"); done
 fi
 
 # 2. Pull an HLS source out of each player page.
 srcs=() refs=()
 for p in $(printf '%s\n' "${players[@]}" | awk '!s[$0]++'); do
-  html=$([[ "$p" == "$url" ]] && echo "$page" || fetch "$p" "$url")
+  if [[ "$p" == "$url" ]]; then html=$page; else html=$(fetch "$p" "$url"); fi
   for s in $(grep -oE '(const|var|let) source *= *"https?://[^"]+"|https?://[^"'\'' ]+\.m3u8[^"'\'' ]*' <<<"$html" \
-             | grep -oE 'https?://[^"]+' | awk '!s[$0]++'); do
+             | grep -oE 'https?://[^"]+' | awk '!s[$0]++' || true); do
     srcs+=("$s"); refs+=("$(origin "$p")/")
   done
 done
 [[ ${#srcs[@]} -gt 0 ]] || ytdl "No stream in the page HTML."
-if [[ -n "$pick" ]]; then srcs=("${srcs[pick-1]}"); refs=("${refs[pick-1]}"); fi
+if [[ -n "$pick" ]]; then
+  [[ $pick -le ${#srcs[@]} ]] || { echo "unplayer: only ${#srcs[@]} stream(s) found" >&2; exit 1; }
+  srcs=("${srcs[pick-1]}") refs=("${refs[pick-1]}")
+fi
 
 # 3. First source whose segments are real video wins. Hosts disguise segments as
 #    .txt / text/plain, so check the bytes: MPEG-TS starts with 0x47 ('G'),
@@ -53,14 +110,13 @@ is_video() {
 for i in "${!srcs[@]}"; do
   src=${srcs[i]} ref=${refs[i]}
   m=$(curl -s -m 10 -A "$UA" -e "$ref" "$src" || true)
-  # master playlist -> take the last (highest) variant; fetching all variants at once triggers 429s
+  # Master playlist -> take the last (highest) variant; fetching all variants at once triggers 429s.
   best=$(grep -A1 '^#EXT-X-STREAM-INF' <<<"$m" | grep -v '^#' | tail -1 || true)
   [[ -n "$best" ]] && { src=$(resolve "$src" "$best"); m=$(curl -s -m 10 -A "$UA" -e "$ref" "$src" || true); }
   seg=$(resolve "$src" "$(grep -v '^#' <<<"$m" | grep . | tail -1 || true)")
   if [[ -n "$seg" ]] && is_video "$seg" "$ref"; then
     echo "Playing stream $((i+1)): $src"
-    exec "${MPV[@]}" --no-ytdl \
-      --demuxer-lavf-o=extension_picky=0,allowed_extensions=ALL \
+    play --no-ytdl --demuxer-lavf-o=extension_picky=0,allowed_extensions=ALL \
       --force-media-title="$(basename "${url%/*}")" \
       --referrer="$ref" --user-agent="$UA" --http-header-fields="Origin: ${ref%/}" "$src"
   fi

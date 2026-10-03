@@ -13,13 +13,21 @@ for n in 1 2; do
 done
 echo '<html>404</html>' > "$root/s1/seg.txt"
 printf 'G@\x11\x15rest-of-ts' > "$root/s2/seg.txt"
-printf '#!/bin/sh\necho "MPV $*"\n' > "$root/bin/mpv"; chmod +x "$root/bin/mpv"
+printf '#!/bin/sh\necho "MPV $*" | tr "\\n" " "; echo\n' > "$root/bin/mpv"; chmod +x "$root/bin/mpv"
 python3 -m http.server -d "$root" -b 127.0.0.1 $port >/dev/null 2>&1 & srv=$!
 for _ in $(seq 20); do curl -s "$base/" >/dev/null && break; sleep 0.1; done
 
-out=$(PATH="$root/bin:$PATH" ../unplayer "$base/page.html")
+export XDG_STATE_HOME="$root/state" PATH="$root/bin:$PATH"
+../unplayer --version | grep -q '^unplayer [0-9]'
+out=$(../unplayer -f "$base/page.html")
 echo "$out"
 grep -q 'Stream 1 dead' <<<"$out"
 grep -q "Playing stream 2: $base/s2/high.m3u8" <<<"$out"
 grep -q "MPV .*--referrer=$base/ .*$base/s2/high.m3u8" <<<"$out"
+# default mode detaches mpv and returns; its output goes to the log
+out=$(../unplayer "$base/page.html")
+grep -q 'Opened in mpv' <<<"$out"
+for _ in $(seq 20); do grep -q "MPV .*$base/s2/high.m3u8" "$root/state/unplayer.log" 2>/dev/null && break; sleep 0.1; done
+grep -q "MPV .*$base/s2/high.m3u8" "$root/state/unplayer.log"
+! ../unplayer "$base/page.html" 9 2>/dev/null   # out-of-range stream number
 echo PASS
