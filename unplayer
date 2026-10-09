@@ -70,7 +70,8 @@ play() {
 # hook pulls the raw stream, so the site's player and its ads never load.
 ytdl() { echo "$1 Handing off to yt-dlp..."; play "$url"; }
 
-fetch() { curl -sL -m 15 -A "$UA" ${2:+-e "$2"} "$1" || true; }
+# Tags may span lines (iframe src on its own line), so flatten: every grep here is line-based.
+fetch() { curl -sL -m 15 -A "$UA" ${2:+-e "$2"} "$1" | tr '\n' ' ' || true; }
 origin() { grep -oE '^https?://[^/]+' <<<"$1"; }
 # Absolute URL of a playlist entry (entries may be relative to the playlist).
 resolve() { case "$2" in http*) echo "$2" ;; /*) echo "$(origin "$1")$2" ;; ?*) echo "${1%/*}/$2" ;; esac; }

@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"; root=$(mktemp -d); trap 'kill $srv 2>/dev/null; rm -rf "$root"' EXIT
 port=8765 base=http://127.0.0.1:8765
 mkdir -p "$root/s1" "$root/s2" "$root/bin"
-echo "<iframe id=x src=\"$base/player1.html\"></iframe><iframe src=\"$base/player2.html\"></iframe>" > "$root/page.html"
+printf '<iframe id=x\n  src="%s/player1.html"></iframe><iframe src="%s/player2.html"></iframe>\n' "$base" "$base" > "$root/page.html"
 for n in 1 2; do
   echo "<script>const source = \"$base/s$n/master.m3u8\"</script>" > "$root/player$n.html"
   printf '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=9\nhigh.m3u8\n' > "$root/s$n/master.m3u8"
