@@ -1,18 +1,41 @@
 # unplayer
 
-**Watch any web video stream in mpv, with no ads, popups or browser.**
+[![CI](https://github.com/JonTelep/unplayer/actions/workflows/ci.yml/badge.svg)](https://github.com/JonTelep/unplayer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/JonTelep/unplayer)](https://github.com/JonTelep/unplayer/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Paste a link and unplayer finds the real video stream inside the page's player, then
-plays it in [mpv](https://mpv.io). The website never loads, so its ads, popups,
-popunders, fake "close" buttons and trackers never run.
+**Watch any web video stream in mpv, with no ads, popups or browser.**
 
 ```bash
 unplayer https://example.com/watch/some-live-event
 ```
 
-That's it. A clean video window opens and your terminal is free again.
+Paste a link and unplayer finds the real video stream inside the page's player, then
+plays it in [mpv](https://mpv.io). The website never loads, so its ads, popups,
+popunders, fake "close" buttons and trackers never run. A clean video window opens and
+your terminal is free again.
 
----
+**Platforms:** Linux and macOS (both tested in CI). Windows via WSL2.
+
+## Install
+
+One command. It's a single bash script, no build step:
+
+```bash
+mkdir -p ~/.local/bin && curl -fsSL https://github.com/JonTelep/unplayer/releases/latest/download/unplayer -o ~/.local/bin/unplayer && chmod +x ~/.local/bin/unplayer
+```
+
+It needs **curl** and **mpv**. **yt-dlp** is optional, for YouTube, Twitch and friends.
+
+```bash
+sudo pacman -S mpv yt-dlp        # Arch / Omarchy
+sudo apt install mpv yt-dlp      # Debian / Ubuntu
+sudo dnf install mpv yt-dlp      # Fedora
+brew install mpv yt-dlp          # macOS
+```
+
+Make sure `~/.local/bin` is on your `PATH`. Most distros include it by default.
+To remove it, delete `~/.local/bin/unplayer`.
 
 ## Why?
 
@@ -36,43 +59,6 @@ else, usually in better quality and with smoother playback than the site's own p
   hands off to [yt-dlp](https://github.com/yt-dlp/yt-dlp), which skips the site's
   player and its ads.
 - 🧈 **Smooth playback.** Read-ahead buffering absorbs network hiccups.
-
-## Install
-
-Works on **Linux**. macOS should work too (`brew install mpv yt-dlp`) but is untested.
-
-You need **bash**, **curl** and **mpv**. **yt-dlp** is optional, for YouTube/Twitch.
-
-```bash
-# Arch / Omarchy
-sudo pacman -S mpv yt-dlp curl
-
-# Debian / Ubuntu
-sudo apt install mpv yt-dlp curl
-
-# Fedora
-sudo dnf install mpv yt-dlp curl
-```
-
-Then grab the latest release. It's a single file:
-
-```bash
-mkdir -p ~/.local/bin
-curl -fsSL https://github.com/JonTelep/unplayer/releases/latest/download/unplayer -o ~/.local/bin/unplayer
-chmod +x ~/.local/bin/unplayer
-```
-
-Or clone it, which makes updating as easy as `git pull`:
-
-```bash
-git clone https://github.com/JonTelep/unplayer.git
-cd unplayer
-make install        # links unplayer into ~/.local/bin
-```
-
-Make sure `~/.local/bin` is on your `PATH`. Most distros include it by default.
-
-To remove it: `make uninstall`, or just delete `~/.local/bin/unplayer`.
 
 ## Usage
 
@@ -135,7 +121,10 @@ can't turn the video black.
 ## Development
 
 ```bash
-make test    # offline test against a local fake player (needs python3)
+git clone https://github.com/JonTelep/unplayer.git
+cd unplayer
+make install   # symlinks ./unplayer into ~/.local/bin, so git pull updates it
+make test      # offline test against a local fake player (needs python3)
 ```
 
 The whole tool is one bash script: [`unplayer`](unplayer). Issues and PRs are welcome.
