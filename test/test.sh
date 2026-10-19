@@ -29,5 +29,8 @@ out=$(../unplayer "$base/page.html")
 grep -q 'Opened in mpv' <<<"$out"
 for _ in $(seq 20); do grep -q "MPV .*$base/s2/high.m3u8" "$root/state/unplayer.log" 2>/dev/null && break; sleep 0.1; done
 grep -q "MPV .*$base/s2/high.m3u8" "$root/state/unplayer.log"
+# --print: stream, referer, UA on stdout; progress on stderr
+out=$(../unplayer --print "$base/page.html" 2>/dev/null)
+[[ "$(sed -n 1,2p <<<"$out")" == "$base/s2/high.m3u8"$'\n'"$base/" ]]
 ! ../unplayer "$base/page.html" 9 2>/dev/null   # out-of-range stream number
 echo PASS
