@@ -90,6 +90,93 @@ if a window closes unexpectedly.
 mpv's `1`–`8` picture keys (brightness, contrast…) are disabled, so a stray keypress
 can't turn the video black.
 
+## Web player (self-hosted)
+
+Run unplayer as a website on your own server, so you and anyone you share the password with
+can watch from any device, including phones and TVs. Paste a page URL and you land on a
+plain video player: fullscreen, volume, nothing else. Each attempt is logged on `/stats`.
+
+All you need is a machine with [Docker](https://docs.docker.com/engine/install/) and the
+Compose plugin: a VPS, a home server or your desktop.
+
+### 1. Configure
+
+```bash
+git clone https://github.com/JonTelep/unplayer.git && cd unplayer
+cp .env.example .env
+```
+
+Edit `.env`:
+
+| Setting | What it does |
+|---|---|
+| `PASSWORD` | Phrase that locks every page. Visitors type it once per browser (remembered for a year). **Set one on anything reachable from the internet.** Empty = open to anyone. Generate one with `openssl rand -base64 24`. |
+| `DOMAIN` | Hostname for HTTPS, e.g. `streams.example.com`. Only used by `make deploy`. |
+| `MAX_STREAMS` | Max streams relayed at once (default 5). Each one is an ffmpeg process plus its bandwidth. |
+
+`.env` is gitignored, so your password stays out of git.
+
+### 2a. Public server with HTTPS
+
+```bash
+make deploy    # docker compose up -d --build: the app + Caddy with automatic Let's Encrypt HTTPS
+```
+
+- Add a DNS **A record** for `DOMAIN` pointing at the server's IP. On Cloudflare, set it
+  to **DNS only (grey cloud)**. Cloudflare's proxy isn't meant for relaying video, and it
+  blocks Caddy from getting its certificate.
+- Open ports 80 and 443 in the server's firewall (`sudo ufw allow 80,443/tcp`, plus your
+  host's panel firewall if it has one).
+- Open `https://<DOMAIN>`, enter your password and paste a link.
+
+### 2b. Just this machine (or your home network / Tailscale)
+
+```bash
+make local     # the app only, no Caddy: http://localhost:8080
+```
+
+It only listens on localhost. To reach it from your phone over your LAN or
+[Tailscale](https://tailscale.com), add a `compose.override.yml` (gitignored) with that
+machine's IP and run `make local` again:
+
+```yaml
+services:
+  app:
+    ports: ["100.x.y.z:8080:8080"]   # your Tailscale or LAN IP
+```
+
+Then open `http://100.x.y.z:8080` on the phone.
+
+### Running it
+
+- **Update:** `git pull && make deploy` (or `make local`). Rebuilding also pulls the latest
+  yt-dlp, which sites like YouTube need often.
+- **Change the password:** edit `.env`, then `make deploy` again. Everyone has to re-enter it.
+- **Logs:** `docker compose logs -f app`. **Health check:** `/healthz`.
+- **Stop:** `make clean` (keeps the stats and TLS volumes; `docker compose down -v` wipes them).
+- Stats live in SQLite on the `data` volume and survive rebuilds.
+
+### How the web player plays
+
+- The server finds the stream with `unplayer --print`. ffmpeg then relays it as HLS (fMP4)
+  that browsers play directly: iPhone/Safari natively, everything else through hls.js. The
+  video isn't re-encoded. The audio is re-encoded to plain AAC so it plays cleanly in every
+  browser.
+- Live sources often freeze for 10–20 seconds. The player waits until 30 seconds are buffered
+  before it starts, and that cushion absorbs the freezes. Expect to be a bit behind live and
+  a short "Buffering…" wait when a stream opens.
+- If the browser blocks autoplay (Brave does by default), tap **▶ Tap to play**.
+- A stream stops 5 minutes after its last viewer leaves.
+
+### Security notes
+
+- The password protects the pages and the "start a stream" form. Stream files (`/s/<id>/…`)
+  stay open so a TV can play them over AirPlay. Their URLs are random and stop working when
+  the stream ends.
+- Anyone with the password can make your server fetch public web pages and relay video. The
+  server refuses private and local addresses, so it can't be pointed at your own network.
+  Bandwidth is on you, so keep `MAX_STREAMS` sensible for your plan.
+
 ## How it works
 
 1. **Fetch the page** with `curl`. This is just text, so no scripts run.

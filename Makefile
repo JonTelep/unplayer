@@ -17,4 +17,21 @@ release: test
 	git push origin main v$(VERSION)
 	gh release create v$(VERSION) unplayer --title "unplayer v$(VERSION)" --generate-notes
 
-.PHONY: install uninstall test release
+# web player + Caddy (HTTPS) in Docker; needs .env (cp .env.example .env)
+deploy:
+	@test -f .env || { echo 'cp .env.example .env and set DOMAIN' >&2; exit 1; }
+	docker compose up -d --build
+
+# just the app on this machine, no Caddy/HTTPS: http://localhost:8080
+local:
+	@test -f .env || { echo 'cp .env.example .env' >&2; exit 1; }
+	docker compose up -d --build app
+	docker compose rm -sf caddy
+	@echo 'unplayer is up: http://localhost:8080'
+
+# stop and remove what deploy started (containers, network, built image); keeps stats + TLS cert volumes.
+# Wipe those too: docker compose down -v
+clean:
+	docker compose down --rmi local
+
+.PHONY: install uninstall test release deploy local clean

@@ -17,17 +17,20 @@ Usage: unplayer [options] <url> [N]
 
 Options:
   -f, --foreground  keep mpv attached to this terminal (shows its output)
+  -p, --print       print the stream URL, referer and user agent (one per line)
+                    instead of playing it; progress goes to stderr
   -h, --help        show this help
   -V, --version     show version
 EOF
 }
 
-fg=
+fg= print=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     -V|--version) echo "unplayer $VERSION"; exit 0 ;;
     -f|--foreground) fg=1; shift ;;
+    -p|--print) print=1; exec 3>&1 1>&2; shift ;;
     -*) echo "unplayer: unknown option $1" >&2; usage >&2; exit 2 ;;
     *) break ;;
   esac
@@ -35,7 +38,7 @@ done
 [[ $# -ge 1 ]] || { usage >&2; exit 2; }
 url=$1 pick=${2:-}
 [[ -z "$pick" || "$pick" =~ ^[1-9][0-9]*$ ]] || { echo "unplayer: N must be a positive number" >&2; exit 2; }
-for dep in curl mpv; do
+for dep in curl $([[ -n "$print" ]] || echo mpv); do
   command -v "$dep" >/dev/null || { echo "unplayer: '$dep' is required but not installed" >&2; exit 1; }
 done
 
@@ -68,7 +71,12 @@ play() {
 }
 # Sites whose player hides the stream (YouTube, Twitch, ~1800 more): mpv's yt-dlp
 # hook pulls the raw stream, so the site's player and its ads never load.
-ytdl() { echo "$1 Handing off to yt-dlp..."; play "$url"; }
+ytdl() {
+  echo "$1 Handing off to yt-dlp..."
+  [[ -z "$print" ]] && play "$url"
+  local src; src=$(yt-dlp -g -f b "$url" | head -1) && [[ -n "$src" ]] || exit 1
+  printf '%s\n\n%s\n' "$src" "$UA" >&3; exit 0
+}
 
 # Tags may span lines (iframe src on its own line), so flatten: every grep here is line-based.
 fetch() { curl -sL -m 15 -A "$UA" ${2:+-e "$2"} "$1" | tr '\n' ' ' || true; }
@@ -117,6 +125,7 @@ for i in "${!srcs[@]}"; do
   seg=$(resolve "$src" "$(grep -v '^#' <<<"$m" | grep . | tail -1 || true)")
   if [[ -n "$seg" ]] && is_video "$seg" "$ref"; then
     echo "Playing stream $((i+1)): $src"
+    [[ -n "$print" ]] && { printf '%s\n%s\n%s\n' "$src" "$ref" "$UA" >&3; exit 0; }
     play --no-ytdl --demuxer-lavf-o=extension_picky=0,allowed_extensions=ALL \
       --force-media-title="$(basename "${url%/*}")" \
       --referrer="$ref" --user-agent="$UA" --http-header-fields="Origin: ${ref%/}" "$src"

@@ -1,0 +1,17 @@
+# `docker compose up -d --build` (or `make deploy`). Caddy gets a Let's Encrypt cert for DOMAIN.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes: [data:/data]   # stats.db survives rebuilds
+    ports: ["127.0.0.1:8080:8080"]  # `make local`; this machine only, so the VPS still goes through Caddy
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    command: caddy reverse-proxy --from ${DOMAIN:?set DOMAIN in .env} --to app:8080
+    volumes: [caddy:/data]  # keeps the TLS cert across restarts
+volumes:
+  data:
+  caddy:
