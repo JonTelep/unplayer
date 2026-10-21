@@ -166,7 +166,23 @@ Then open `http://100.x.y.z:8080` on the phone.
   before it starts, and that cushion absorbs the freezes. Expect to be a bit behind live and
   a short "Buffering…" wait when a stream opens.
 - If the browser blocks autoplay (Brave does by default), tap **▶ Tap to play**.
-- A stream stops 5 minutes after its last viewer leaves.
+- A stream stops 5 minutes after its last viewer leaves. Everyone watching the same link shares
+  one relay.
+- The page shows each step while it works (finding the stream, checking mirrors, buffering).
+  **Next mirror →** switches to the next stream on the page. If the source dies, the player
+  says so, and **↻ Restart** starts the stream again.
+- Watch links are `/w?url=<page>`, so you can bookmark them, refresh them or send them to
+  someone, and they always restart the stream. Recent links are listed on the home page.
+
+### Skip the paste
+
+- **Desktop:** drag the **▶ unplayer** link on the home page to your bookmarks bar. Click it on
+  any video page.
+- **Android:** install the site as an app (browser menu → *Add to Home screen*). unplayer then
+  appears in the share menu.
+- **iPhone:** make a Shortcut that shows in the share sheet with *URL Encode* (Shortcut Input) →
+  *Open URLs* `https://<DOMAIN>/w?url=<Encoded URL>`.
+- Pasting a link into the box starts it right away; you don't need to press Watch.
 
 ### Security notes
 
