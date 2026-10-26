@@ -1,0 +1,17 @@
+{
+	auto_https disable_redirects
+}
+streams.telep.io {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	reverse_proxy app:8080
+}
+
+# OpenMedina (Cloudflare proxied, SSL mode Full; origin cert is Caddy internal)
+openmedina.org, www.openmedina.org {
+	tls internal
+	reverse_proxy open-medina:3000
+}
