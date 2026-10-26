@@ -133,3 +133,4 @@ for i in "${!srcs[@]}"; do
   echo "Stream $((i+1)) dead, trying next..."
 done
 ytdl "No working stream."
+

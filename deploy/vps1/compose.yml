@@ -1,0 +1,20 @@
+# Deployed by Grok Bot. Port 80 on this host belongs to barkmarks-preview, so Caddy only
+# publishes 443 on the public IP and gets its cert via TLS-ALPN-01.
+name: unplayer
+services:
+  app:
+    build: .
+    container_name: unplayer-app
+    restart: unless-stopped
+    env_file: .env
+    volumes: [data:/data]
+    ports: ["127.0.0.1:8080:8080"]
+  caddy:
+    image: caddy:2.11-alpine
+    container_name: unplayer-caddy
+    restart: unless-stopped
+    ports: ["2.24.106.199:443:443"]
+    volumes: [caddy:/data, ./Caddyfile:/etc/caddy/Caddyfile:ro]
+volumes:
+  data:
+  caddy:
